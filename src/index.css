@@ -1,0 +1,23 @@
+@import "tailwindcss";
+
+/* Mobile optimization: Prevent iOS zoom on input focus while keeping crisp desktop font size */
+@media (max-width: 640px) {
+  input[type="text"],
+  input[type="email"],
+  input[type="tel"],
+  input[type="url"],
+  input[type="number"],
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* Smooth touch tap highlights and scroll behavior */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+html {
+  scroll-behavior: smooth;
+}

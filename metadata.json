@@ -1,0 +1,6 @@
+{
+  "name": "Portal Pendaftaran & Verifikasi Reseller Resmi",
+  "description": "Portal web pendaftaran dan verifikasi reseller multi-halaman PT. PODA E-LIQUID COMPANY dengan validasi otomatis, percabangan dinamis, auto-save database, dan dashboard admin evaluasi.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
