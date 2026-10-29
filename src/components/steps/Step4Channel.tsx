@@ -1,6 +1,7 @@
 import React from 'react';
 import { Share2, Store, Globe, Layers, ArrowRight, ArrowLeft, AlertCircle } from 'lucide-react';
 import { FormData, FormErrors, SalesChannel } from '../../types/form';
+import { FormPageSettings } from '../../types/formSettings';
 
 interface Step4Props {
   formData: FormData;
@@ -8,6 +9,7 @@ interface Step4Props {
   errors: FormErrors;
   onNext: () => void;
   onPrev: () => void;
+  settings?: FormPageSettings;
 }
 
 export const Step4Channel: React.FC<Step4Props> = ({
@@ -16,6 +18,7 @@ export const Step4Channel: React.FC<Step4Props> = ({
   errors,
   onNext,
   onPrev,
+  settings,
 }) => {
   const channels: {
     value: SalesChannel;

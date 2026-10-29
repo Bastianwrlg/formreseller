@@ -32,6 +32,7 @@ import {
   apiSubmitApplication,
   apiGetStats,
   apiGetFormSettings,
+  subscribeToFirestoreSettings,
 } from './services/api';
 import { subscribeToSync } from './services/syncService';
 
@@ -71,12 +72,22 @@ export default function App() {
       if (s) setFormSettings(s);
     });
 
-    const unsubscribe = subscribeToSync((event) => {
+    // 1. Live settings from Cloud Firestore across all devices
+    const unsubscribeFirestore = subscribeToFirestoreSettings((s) => {
+      setFormSettings(s);
+    });
+
+    // 2. Cross-tab sync
+    const unsubscribeSync = subscribeToSync((event) => {
       if (event.type === 'SETTINGS_UPDATED' && event.payload?.settings) {
         setFormSettings(event.payload.settings);
       }
     });
-    return () => unsubscribe();
+
+    return () => {
+      unsubscribeFirestore();
+      unsubscribeSync();
+    };
   }, []);
 
   const handleSetActiveView = (view: 'form' | 'admin' | 'settings') => {
@@ -137,16 +148,27 @@ export default function App() {
 
   // Navigate to Next step with strict validation
   const handleNextStep = () => {
-    const stepErrors = validateStep(currentStep, formData);
+    const stepErrors = validateStep(currentStep, formData, formSettings);
     if (Object.keys(stepErrors).length > 0) {
       setErrors(stepErrors);
-      setValidationToast(
-        currentStep === 5 && formData.salesChannel === 'Toko Fisik dan Toko Online'
-          ? 'Harap lengkapi data toko online pada Bagian B (Toko Online).'
-          : 'Harap periksa dan lengkapi data bertanda (*) sebelum melanjutkan.'
+
+      // Provide the exact descriptive error message so applicant knows exactly what is missing
+      const firstErrorMsg =
+        Object.values(stepErrors)[0] ||
+        'Harap periksa dan lengkapi data bertanda (*) sebelum melanjutkan.';
+      setValidationToast(firstErrorMsg);
+      setTimeout(() => setValidationToast(null), 5000);
+
+      // Scroll to the first missing element or error section
+      const firstErrorKey = Object.keys(stepErrors)[0];
+      const targetElement = document.querySelector(
+        `[name="${firstErrorKey}"], #field-upload-36, #field-upload-37, #field-upload-38, #field-upload-39, #field-upload-40, #field-upload-41`
       );
-      setTimeout(() => setValidationToast(null), 4000);
-      window.scrollTo({ top: 100, behavior: 'smooth' });
+      if (targetElement) {
+        targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } else {
+        window.scrollTo({ top: 120, behavior: 'smooth' });
+      }
       return;
     }
 
@@ -183,7 +205,7 @@ export default function App() {
     }
 
     // If clicking forward, validate current step first
-    const stepErrors = validateStep(currentStep, formData);
+    const stepErrors = validateStep(currentStep, formData, formSettings);
     if (Object.keys(stepErrors).length === 0) {
       setErrors({});
       setCurrentStep(step);
@@ -191,14 +213,21 @@ export default function App() {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } else {
       setErrors(stepErrors);
+      const firstMsg = Object.values(stepErrors)[0];
+      if (firstMsg) {
+        setValidationToast(firstMsg);
+        setTimeout(() => setValidationToast(null), 4000);
+      }
     }
   };
 
   // Submit Final Application
   const handleSubmit = async () => {
-    const stepErrors = validateStep(9, formData);
+    const stepErrors = validateStep(9, formData, formSettings);
     if (Object.keys(stepErrors).length > 0) {
       setErrors(stepErrors);
+      setValidationToast(Object.values(stepErrors)[0] || null);
+      setTimeout(() => setValidationToast(null), 4000);
       return;
     }
 
@@ -331,6 +360,7 @@ export default function App() {
                   errors={errors}
                   onNext={handleNextStep}
                   onPrev={handlePrevStep}
+                  settings={formSettings}
                 />
               )}
 
@@ -341,6 +371,7 @@ export default function App() {
                   errors={errors}
                   onNext={handleNextStep}
                   onPrev={handlePrevStep}
+                  settings={formSettings}
                 />
               )}
 
@@ -351,6 +382,7 @@ export default function App() {
                   errors={errors}
                   onNext={handleNextStep}
                   onPrev={handlePrevStep}
+                  settings={formSettings}
                 />
               )}
 
@@ -385,6 +417,7 @@ export default function App() {
                   errors={errors}
                   onNext={handleNextStep}
                   onPrev={handlePrevStep}
+                  settings={formSettings}
                 />
               )}
 
@@ -396,6 +429,7 @@ export default function App() {
                   onSubmit={handleSubmit}
                   onPrev={handlePrevStep}
                   isSubmitting={isSubmitting}
+                  settings={formSettings}
                 />
               )}
 

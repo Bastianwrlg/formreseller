@@ -1,6 +1,31 @@
 import { FormData } from '../types/form';
 import { FormPageSettings, DEFAULT_FORM_SETTINGS } from '../types/formSettings';
 import { broadcastSyncEvent } from './syncService';
+import {
+  collection,
+  doc,
+  setDoc,
+  getDocs,
+  getDoc,
+  updateDoc,
+  onSnapshot,
+} from 'firebase/firestore';
+import { db } from './firebase';
+
+function sanitizeForFirestore(obj: any): any {
+  if (obj === null || obj === undefined) return null;
+  if (Array.isArray(obj)) return obj.map(sanitizeForFirestore);
+  if (typeof obj === 'object') {
+    const cleaned: Record<string, any> = {};
+    for (const [key, value] of Object.entries(obj)) {
+      if (value !== undefined) {
+        cleaned[key] = sanitizeForFirestore(value);
+      }
+    }
+    return cleaned;
+  }
+  return obj;
+}
 
 const LOCAL_STORAGE_KEY = 'reseller_application_active_draft_v1';
 const LOCAL_STORAGE_ALL_APPS = 'reseller_all_applications_db_v1';
@@ -73,6 +98,7 @@ export const initialFormData: FormData = {
   docPurchaseProof: undefined,
   docPowerOfAttorney: undefined,
   docBoardAuthority: undefined,
+  uploadLaterConsent: false,
 
   // Step 8
   agreeTerms: false,
@@ -306,7 +332,7 @@ export async function apiSaveDraft(
   const list = getLocalAppsList();
   const existingIdx = list.findIndex((a) => a.id === data.id);
   const now = new Date().toISOString();
-  const updatedItem = {
+  const updatedItem: FormData = {
     ...data,
     updatedAt: now,
     status: data.status || 'draft',
@@ -319,6 +345,18 @@ export async function apiSaveDraft(
   }
   saveLocalAppsList(list);
 
+  // 1. Persist to Cloud Firestore
+  try {
+    if (updatedItem.id) {
+      await setDoc(doc(db, 'applications', updatedItem.id), sanitizeForFirestore(updatedItem), {
+        merge: true,
+      });
+    }
+  } catch (firestoreErr) {
+    console.warn('Firestore draft save fallback:', firestoreErr);
+  }
+
+  // 2. Also try Express server if running
   try {
     const res = await fetch('/api/applications/draft', {
       method: 'POST',
@@ -362,6 +400,15 @@ export async function apiSubmitApplication(
   saveLocalAppsList(list);
   clearLocalDraft();
 
+  // 1. Save directly to Cloud Firestore (Real-Time Cloud Persistence)
+  try {
+    await setDoc(doc(db, 'applications', finalData.id), sanitizeForFirestore(finalData), {
+      merge: true,
+    });
+  } catch (firestoreErr) {
+    console.warn('Firestore submission write error:', firestoreErr);
+  }
+
   // Instant real-time multi-tab & cross-window synchronization
   broadcastSyncEvent('NEW_APPLICATION', { application: finalData });
 
@@ -369,7 +416,7 @@ export async function apiSubmitApplication(
     const res = await fetch('/api/applications/submit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
+      body: JSON.stringify(finalData),
     });
     if (res.ok) {
       const json = await res.json();
@@ -382,7 +429,7 @@ export async function apiSubmitApplication(
   return {
     success: true,
     application: finalData,
-    message: 'Permohonan berhasil disimpan ke database',
+    message: 'Permohonan berhasil disimpan ke database dan disinkronkan',
   };
 }
 
@@ -392,6 +439,53 @@ export async function apiGetApplications(params?: {
   search?: string;
   channel?: string;
 }): Promise<FormData[]> {
+  // 1. Try fetching from Cloud Firestore
+  try {
+    const snap = await getDocs(collection(db, 'applications'));
+    if (!snap.empty) {
+      const firestoreList: FormData[] = [];
+      snap.forEach((d) => {
+        firestoreList.push(d.data() as FormData);
+      });
+      firestoreList.sort(
+        (a, b) =>
+          new Date(b.updatedAt || b.createdAt).getTime() -
+          new Date(a.updatedAt || a.createdAt).getTime()
+      );
+      saveLocalAppsList(firestoreList);
+
+      let filtered = firestoreList;
+      if (params?.status && params.status !== 'all') {
+        filtered = filtered.filter((a) => a.status === params.status);
+      }
+      if (params?.channel && params.channel !== 'all') {
+        filtered = filtered.filter((a) => a.salesChannel === params.channel);
+      }
+      if (params?.search) {
+        const q = params.search.toLowerCase();
+        filtered = filtered.filter(
+          (a) =>
+            (a.registrationNumber && a.registrationNumber.toLowerCase().includes(q)) ||
+            (a.businessTradeName && a.businessTradeName.toLowerCase().includes(q)) ||
+            (a.applicantName && a.applicantName.toLowerCase().includes(q)) ||
+            (a.nibNumber && a.nibNumber.toLowerCase().includes(q))
+        );
+      }
+      return filtered;
+    } else {
+      // Seed demo data to Firestore on very first access if empty
+      const initialSeed = getSeedApplications();
+      for (const item of initialSeed) {
+        setDoc(doc(db, 'applications', item.id), sanitizeForFirestore(item)).catch(() => {});
+      }
+      saveLocalAppsList(initialSeed);
+      return initialSeed;
+    }
+  } catch (firestoreErr) {
+    console.warn('Firestore fetch fallback:', firestoreErr);
+  }
+
+  // 2. Try Node/Express server if running
   try {
     const query = new URLSearchParams();
     if (params?.status) query.append('status', params.status);
@@ -410,7 +504,7 @@ export async function apiGetApplications(params?: {
     // Netlify static fallback
   }
 
-  // Client-side query
+  // 3. Client-side query fallback
   let list = getLocalAppsList();
   if (params?.status && params.status !== 'all') {
     list = list.filter((a) => a.status === params.status);
@@ -434,13 +528,18 @@ export async function apiGetApplications(params?: {
 // Fetch stats
 export async function apiGetStats() {
   try {
-    const res = await fetch('/api/stats');
-    if (res.ok) {
-      const json = await res.json();
-      return json.stats;
-    }
+    const apps = await apiGetApplications();
+    return {
+      total: apps.length,
+      drafts: apps.filter((a) => a.status === 'draft').length,
+      submitted: apps.filter((a) => a.status === 'submitted').length,
+      approved: apps.filter((a) => a.status === 'approved' || a.status === 'continued').length,
+      on_hold: apps.filter((a) => a.status === 'on_hold').length,
+      channel_rejected: apps.filter((a) => a.status === 'channel_rejected').length,
+      rejected: apps.filter((a) => a.status === 'rejected').length,
+    };
   } catch (err) {
-    // Netlify fallback
+    // Fallback
   }
 
   const list = getLocalAppsList();
@@ -487,6 +586,24 @@ export async function apiUpdateDecision(
     broadcastSyncEvent('APPLICATION_UPDATED', { application: updatedApp, id });
   }
 
+  // 1. Update Cloud Firestore
+  try {
+    await updateDoc(
+      doc(db, 'applications', id),
+      sanitizeForFirestore({
+        status: payload.status,
+        adminDecision: payload.decision,
+        adminNotes: payload.adminNotes,
+        reviewedBy: payload.reviewerName || 'Divisi Kemitraan PT. PODA E-LIQUID COMPANY',
+        reviewedAt: now,
+        updatedAt: now,
+      })
+    );
+  } catch (firestoreErr) {
+    console.warn('Firestore update decision fallback:', firestoreErr);
+  }
+
+  // 2. Update Express server if available
   try {
     const res = await fetch(`/api/applications/${id}/decision`, {
       method: 'PATCH',
@@ -531,6 +648,19 @@ export function saveLocalFormSettings(settings: FormPageSettings) {
 }
 
 export async function apiGetFormSettings(): Promise<FormPageSettings> {
+  // 1. Try Cloud Firestore
+  try {
+    const snap = await getDoc(doc(db, 'settings', 'form_page_settings'));
+    if (snap.exists()) {
+      const data = snap.data() as FormPageSettings;
+      saveLocalFormSettings(data);
+      return data;
+    }
+  } catch (firestoreErr) {
+    console.warn('Firestore settings fetch fallback:', firestoreErr);
+  }
+
+  // 2. Try Node server
   try {
     const res = await fetch('/api/settings');
     if (res.ok) {
@@ -559,6 +689,16 @@ export async function apiSaveFormSettings(
   // Broadcast settings changes instantly to all open applicant forms!
   broadcastSyncEvent('SETTINGS_UPDATED', { settings: updatedSettings });
 
+  // 1. Save to Cloud Firestore
+  try {
+    await setDoc(doc(db, 'settings', 'form_page_settings'), sanitizeForFirestore(updatedSettings), {
+      merge: true,
+    });
+  } catch (firestoreErr) {
+    console.warn('Firestore save settings fallback:', firestoreErr);
+  }
+
+  // 2. Save to Express server if running
   try {
     const res = await fetch('/api/settings', {
       method: 'POST',
@@ -575,4 +715,71 @@ export async function apiSaveFormSettings(
 
   return { success: true, settings: updatedSettings };
 }
+
+// ----------------------------------------------------
+// Real-Time Cloud Listeners (Firestore Snapshots)
+// ----------------------------------------------------
+
+/**
+ * Real-time subscription to applications from Cloud Firestore
+ * When any user on any device submits, all admins are updated immediately!
+ */
+export function subscribeToFirestoreApplications(
+  callback: (applications: FormData[]) => void
+): () => void {
+  try {
+    const colRef = collection(db, 'applications');
+    return onSnapshot(
+      colRef,
+      (snapshot) => {
+        const list: FormData[] = [];
+        snapshot.forEach((docSnap) => {
+          list.push(docSnap.data() as FormData);
+        });
+        list.sort(
+          (a, b) =>
+            new Date(b.updatedAt || b.createdAt).getTime() -
+            new Date(a.updatedAt || a.createdAt).getTime()
+        );
+        saveLocalAppsList(list);
+        callback(list);
+      },
+      (error) => {
+        console.warn('Firestore realtime applications listener error:', error);
+      }
+    );
+  } catch (err) {
+    console.warn('Failed to start Firestore applications listener:', err);
+    return () => {};
+  }
+}
+
+/**
+ * Real-time subscription to form page settings from Cloud Firestore
+ * When admin modifies any page setting, all open applicant forms react live!
+ */
+export function subscribeToFirestoreSettings(
+  callback: (settings: FormPageSettings) => void
+): () => void {
+  try {
+    const docRef = doc(db, 'settings', 'form_page_settings');
+    return onSnapshot(
+      docRef,
+      (snap) => {
+        if (snap.exists()) {
+          const data = snap.data() as FormPageSettings;
+          saveLocalFormSettings(data);
+          callback(data);
+        }
+      },
+      (error) => {
+        console.warn('Firestore realtime settings listener error:', error);
+      }
+    );
+  } catch (err) {
+    console.warn('Failed to start Firestore settings listener:', err);
+    return () => {};
+  }
+}
+
 

@@ -25,7 +25,11 @@ import {
 } from 'lucide-react';
 import { FormData, ApplicationStatus } from '../types/form';
 import { ADMIN_DECISION_RULES } from '../data/indonesia';
-import { apiGetApplications, apiUpdateDecision } from '../services/api';
+import {
+  apiGetApplications,
+  apiUpdateDecision,
+  subscribeToFirestoreApplications,
+} from '../services/api';
 import { SuratPenunjukanModal } from './SuratPenunjukanModal';
 import { exportApplicationsToExcel } from '../utils/excelExport';
 import { subscribeToSync } from '../services/syncService';
@@ -50,8 +54,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToForm }) => {
   const [adminTab, setAdminTab] = useState<'evaluations' | 'settings'>('evaluations');
   const [liveAlert, setLiveAlert] = useState<string | null>(null);
 
-  const fetchApps = async () => {
-    setLoading(true);
+  const fetchApps = async (showLoading = false) => {
+    if (showLoading) setLoading(true);
     const data = await apiGetApplications({
       status: statusFilter !== 'all' ? statusFilter : undefined,
       search: searchQuery || undefined,
@@ -61,31 +65,52 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToForm }) => {
   };
 
   useEffect(() => {
-    fetchApps();
+    fetchApps(true);
 
-    // 1. Subscribe to instant real-time events across tabs & windows
-    const unsubscribe = subscribeToSync((event) => {
+    // 1. Subscribe to Cloud Firestore real-time snapshot (Multi-Device & Cross-User)
+    const unsubscribeFirestore = subscribeToFirestoreApplications((freshList) => {
+      let filtered = freshList;
+      if (statusFilter !== 'all') {
+        filtered = filtered.filter((a) => a.status === statusFilter);
+      }
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        filtered = filtered.filter(
+          (a) =>
+            (a.registrationNumber && a.registrationNumber.toLowerCase().includes(q)) ||
+            (a.businessTradeName && a.businessTradeName.toLowerCase().includes(q)) ||
+            (a.applicantName && a.applicantName.toLowerCase().includes(q)) ||
+            (a.nibNumber && a.nibNumber.toLowerCase().includes(q))
+        );
+      }
+      setApplications(filtered);
+      setLoading(false);
+    });
+
+    // 2. Subscribe to instant real-time events across tabs & windows
+    const unsubscribeSync = subscribeToSync((event) => {
       if (event.type === 'NEW_APPLICATION') {
         const regNum = event.payload?.application?.registrationNumber || 'Baru';
         const storeName = event.payload?.application?.businessTradeName || 'Toko Reseller';
         setLiveAlert(`Permohonan baru masuk: ${regNum} (${storeName})`);
-        fetchApps();
+        fetchApps(false);
         setTimeout(() => setLiveAlert(null), 6000);
       } else if (event.type === 'APPLICATION_UPDATED' || event.type === 'FORCE_REFRESH') {
-        fetchApps();
+        fetchApps(false);
       }
     });
 
-    // 2. Background polling heartbeat every 5 seconds for multi-device sync
+    // 3. Heartbeat polling every 10 seconds for multi-device sync redundancy
     const intervalId = setInterval(() => {
-      fetchApps();
-    }, 5000);
+      fetchApps(false);
+    }, 10000);
 
     return () => {
-      unsubscribe();
+      unsubscribeFirestore();
+      unsubscribeSync();
       clearInterval(intervalId);
     };
-  }, [statusFilter]);
+  }, [statusFilter, searchQuery]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -255,10 +280,16 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToForm }) => {
               <ShieldCheck className="w-5 h-5" />
             </span>
             <div>
-              <h1 className="text-base sm:text-xl font-bold text-slate-900">
-                Portal Internal Verifikasi Reseller
-              </h1>
-              <p className="text-[11px] sm:text-xs text-slate-500">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-base sm:text-xl font-bold text-slate-900">
+                  Portal Internal Verifikasi Reseller
+                </h1>
+                <span className="inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <span>Cloud Sync Aktif (Real-Time)</span>
+                </span>
+              </div>
+              <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">
                 Divisi Kemitraan PT. PODA E-LIQUID COMPANY • Standar Evaluasi SOP Halaman 20 & 21
               </p>
             </div>
@@ -354,7 +385,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToForm }) => {
 
           <button
             type="button"
-            onClick={fetchApps}
+            onClick={() => fetchApps(true)}
             className="inline-flex items-center justify-center space-x-1.5 px-3 py-2 bg-blue-50 text-blue-700 hover:bg-blue-100 text-xs font-semibold rounded-xl transition-colors border border-blue-200"
             title="Muat data terbaru secara manual"
           >

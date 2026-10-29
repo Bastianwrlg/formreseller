@@ -52,6 +52,7 @@ export interface FormPageSettings {
     requireInvoiceProof: boolean; // Jadikan faktur wajib atau opsional
     requireNibDoc: boolean;
     requireStorePhoto: boolean;
+    allowUploadLater: boolean; // Izinkan pendaftar menyusulkan dokumen lewat WhatsApp
     maxUploadSizeMb: number;
   };
 
@@ -131,9 +132,10 @@ export const DEFAULT_FORM_SETTINGS: FormPageSettings = {
   },
 
   halaman7: {
-    requireInvoiceProof: false, // Default: opsional/anjuran
-    requireNibDoc: true,
-    requireStorePhoto: true,
+    requireInvoiceProof: false, // Default: opsional / anjuran
+    requireNibDoc: false, // Default ramah pengguna: boleh disusulkan
+    requireStorePhoto: false, // Default ramah pengguna: boleh disusulkan
+    allowUploadLater: true, // Kemudahan: izinkan menyusulkan berkas lewat WA
     maxUploadSizeMb: 10,
   },
 

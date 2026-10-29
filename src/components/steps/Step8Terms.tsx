@@ -1,6 +1,7 @@
 import React from 'react';
 import { ShieldAlert, ArrowRight, ArrowLeft, AlertCircle, FileText, CheckCircle2 } from 'lucide-react';
-import { FormData, FormErrors, FormSettings } from '../../types/form';
+import { FormData, FormErrors } from '../../types/form';
+import { FormPageSettings } from '../../types/formSettings';
 
 interface Step8Props {
   formData: FormData;
@@ -8,7 +9,7 @@ interface Step8Props {
   errors: FormErrors;
   onNext: () => void;
   onPrev: () => void;
-  settings?: FormSettings;
+  settings?: FormPageSettings;
 }
 
 export const Step8Terms: React.FC<Step8Props> = ({
@@ -19,6 +20,7 @@ export const Step8Terms: React.FC<Step8Props> = ({
   onPrev,
   settings,
 }) => {
+  const minAge = settings?.halaman8?.minimumAgeLimit || 21;
   return (
     <div className="space-y-6">
       <div className="bg-white p-6 sm:p-7 rounded-2xl border border-slate-200 shadow-xs">
@@ -50,7 +52,7 @@ export const Step8Terms: React.FC<Step8Props> = ({
               <strong className="text-slate-900">2. Keaslian Produk:</strong> Reseller wajib menjual produk asli yang diperoleh melalui sumber yang sah dan dapat ditelusuri rantai pasoknya.
             </div>
             <div>
-              <strong className="text-slate-900">3. Kepatuhan Hukum:</strong> Reseller wajib mematuhi seluruh peraturan perundang-undangan yang berlaku, termasuk perizinan usaha, ketentuan lokasi penjualan (zonasi sekolah & fasilitas anak), larangan penjualan kepada pihak yang dilarang (anak di bawah umur), dan regulasi sistem elektronik.
+              <strong className="text-slate-900">3. Kepatuhan Hukum:</strong> Reseller wajib mematuhi seluruh peraturan perundang-undangan yang berlaku, termasuk perizinan usaha, ketentuan lokasi penjualan (zonasi sekolah & fasilitas anak), larangan penjualan kepada pihak yang dilarang (anak di bawah umur {minAge} tahun), dan regulasi sistem elektronik.
             </div>
             <div>
               <strong className="text-slate-900">4. Batas Kewenangan:</strong> Status reseller bersifat non-eksklusif dan tidak memberikan hak untuk bertindak sebagai distributor utama, agen tunggal, perwakilan resmi perusahaan, atau Official Store tunggal.
@@ -84,11 +86,7 @@ export const Step8Terms: React.FC<Step8Props> = ({
           </h3>
           <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 sm:p-5 max-h-56 overflow-y-auto text-xs text-slate-700 space-y-2.5 leading-relaxed">
             <p>
-              {settings?.privacyPolicyText || (
-                <>
-                  <strong>{settings?.companyName || 'PT. PODA E-LIQUID COMPANY'}</strong> bertindak sebagai pengendali data pribadi yang dikumpulkan melalui formulir ini sesuai Undang-Undang Perlindungan Data Pribadi (UU PDP No. 27 Tahun 2022). Data meliputi identitas pemohon, informasi kontak, identitas usaha, alamat toko fisik, informasi akun online, serta dokumen pendukung verifikasi.
-                </>
-              )}
+              <strong>PT. PODA E-LIQUID COMPANY</strong> bertindak sebagai pengendali data pribadi yang dikumpulkan melalui formulir ini sesuai Undang-Undang Perlindungan Data Pribadi (UU PDP No. 27 Tahun 2022). Data meliputi identitas pemohon, informasi kontak, identitas usaha, alamat toko fisik, informasi akun online, serta dokumen pendukung verifikasi.
             </p>
             <p>
               Data diproses untuk keperluan verifikasi identitas dan kewenangan, pemeriksaan legalitas usaha, evaluasi permohonan reseller, penerbitan surat otorisasi, pengawasan kepatuhan penunjukan, serta penyelesaian pengaduan dan pemenuhan kewajiban regulasi hukum.

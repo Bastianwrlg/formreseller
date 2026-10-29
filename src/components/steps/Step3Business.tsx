@@ -1,6 +1,7 @@
 import React from 'react';
 import { Building2, ArrowRight, ArrowLeft, AlertCircle } from 'lucide-react';
 import { FormData, FormErrors, BusinessType } from '../../types/form';
+import { FormPageSettings } from '../../types/formSettings';
 import { BUSINESS_TYPES, INDONESIA_PROVINCES } from '../../data/indonesia';
 
 interface Step3Props {
@@ -9,6 +10,7 @@ interface Step3Props {
   errors: FormErrors;
   onNext: () => void;
   onPrev: () => void;
+  settings?: FormPageSettings;
 }
 
 export const Step3Business: React.FC<Step3Props> = ({
@@ -17,7 +19,14 @@ export const Step3Business: React.FC<Step3Props> = ({
   errors,
   onNext,
   onPrev,
+  settings,
 }) => {
+  const allowedBusinessTypes =
+    settings?.halaman3?.allowedBusinessTypes && settings.halaman3.allowedBusinessTypes.length > 0
+      ? settings.halaman3.allowedBusinessTypes
+      : BUSINESS_TYPES;
+  const isNibRequired = settings?.halaman3?.nibRequired ?? true;
+  const nibDigitLength = settings?.halaman3?.nibDigitLength || 13;
   return (
     <div className="space-y-6">
       <div className="bg-white p-6 sm:p-7 rounded-2xl border border-slate-200 shadow-xs">
@@ -72,7 +81,7 @@ export const Step3Business: React.FC<Step3Props> = ({
               9. Bentuk Usaha <span className="text-rose-500">*</span>
             </label>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mt-2">
-              {BUSINESS_TYPES.map((type) => (
+              {allowedBusinessTypes.map((type) => (
                 <label
                   key={type}
                   className={`flex items-center space-x-3 p-3 rounded-xl border cursor-pointer transition-all ${
@@ -146,21 +155,21 @@ export const Step3Business: React.FC<Step3Props> = ({
           {/* Q11: Nomor Induk Berusaha (NIB) */}
           <div>
             <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1">
-              11. Nomor Induk Berusaha (NIB) <span className="text-rose-500">*</span>
+              11. Nomor Induk Berusaha (NIB) {isNibRequired ? <span className="text-rose-500">*</span> : <span className="text-slate-400 font-normal text-xs">(Opsional)</span>}
             </label>
             <p className="text-xs text-slate-500 mb-2">
-              Isi nomor sesuai dokumen NIB usaha yang terdaftar di OSS (13 digit angka).
+              Isi nomor sesuai dokumen NIB usaha yang terdaftar di OSS ({nibDigitLength} digit angka).
             </p>
             <input
               type="text"
-              maxLength={13}
+              maxLength={nibDigitLength}
               value={formData.nibNumber}
               onChange={(e) => {
                 // only numbers
                 const val = e.target.value.replace(/\D/g, '');
                 setFormData((prev) => ({ ...prev, nibNumber: val }));
               }}
-              placeholder="13 digit angka (contoh: 1234567890123)"
+              placeholder={`${nibDigitLength} digit angka`}
               className={`w-full px-4 py-2.5 rounded-xl border text-sm font-mono tracking-wider transition-all focus:outline-hidden focus:ring-2 ${
                 errors.nibNumber
                   ? 'border-rose-400 focus:ring-rose-200 bg-rose-50/20'
@@ -177,7 +186,7 @@ export const Step3Business: React.FC<Step3Props> = ({
                 <span />
               )}
               <span className="text-[11px] text-slate-400 font-mono">
-                {formData.nibNumber.length}/13 digit
+                {formData.nibNumber.length}/{nibDigitLength} digit
               </span>
             </div>
           </div>

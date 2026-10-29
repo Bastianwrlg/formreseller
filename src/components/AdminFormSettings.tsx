@@ -525,7 +525,47 @@ export const AdminFormSettings: React.FC = () => {
             <div className="space-y-3">
               <div className="flex items-center justify-between p-3.5 bg-slate-50 rounded-xl border border-slate-200">
                 <div>
-                  <span className="text-xs font-bold text-slate-800 block">Wajibkan Faktur / Bukti Pembelian Produk</span>
+                  <span className="text-xs font-bold text-slate-800 block">Wajibkan Dokumen NIB OSS (No. 36)</span>
+                  <span className="text-[11px] text-slate-500">
+                    Standar legalitas: pendaftar wajib mengunggah file izin NIB OSS.
+                  </span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={settings.halaman7.requireNibDoc}
+                  onChange={(e) =>
+                    setSettings((prev) => ({
+                      ...prev,
+                      halaman7: { ...prev.halaman7, requireNibDoc: e.target.checked },
+                    }))
+                  }
+                  className="w-4 h-4 text-indigo-600 rounded"
+                />
+              </div>
+
+              <div className="flex items-center justify-between p-3.5 bg-slate-50 rounded-xl border border-slate-200">
+                <div>
+                  <span className="text-xs font-bold text-slate-800 block">Wajibkan Foto Tampak Depan Toko Fisik (No. 37)</span>
+                  <span className="text-[11px] text-slate-500">
+                    Jika tidak dicentang, foto toko fisik menjadi opsional untuk verifikasi cepat.
+                  </span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={settings.halaman7.requireStorePhoto}
+                  onChange={(e) =>
+                    setSettings((prev) => ({
+                      ...prev,
+                      halaman7: { ...prev.halaman7, requireStorePhoto: e.target.checked },
+                    }))
+                  }
+                  className="w-4 h-4 text-indigo-600 rounded"
+                />
+              </div>
+
+              <div className="flex items-center justify-between p-3.5 bg-slate-50 rounded-xl border border-slate-200">
+                <div>
+                  <span className="text-xs font-bold text-slate-800 block">Wajibkan Faktur / Bukti Pembelian Produk (No. 39)</span>
                   <span className="text-[11px] text-slate-500">
                     Jika tidak dicentang, faktur bersifat opsional / anjuran bagi toko baru.
                   </span>

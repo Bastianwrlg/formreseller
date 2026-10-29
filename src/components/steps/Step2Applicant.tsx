@@ -2,6 +2,7 @@ import React from 'react';
 import { UserCheck, ArrowRight, ArrowLeft, AlertCircle, Copy } from 'lucide-react';
 import { FormData, FormErrors, ApplicantRelation } from '../../types/form';
 import { APPLICANT_RELATIONS } from '../../data/indonesia';
+import { FormPageSettings } from '../../types/formSettings';
 
 interface Step2Props {
   formData: FormData;
@@ -9,6 +10,7 @@ interface Step2Props {
   errors: FormErrors;
   onNext: () => void;
   onPrev: () => void;
+  settings?: FormPageSettings;
 }
 
 export const Step2Applicant: React.FC<Step2Props> = ({
@@ -17,7 +19,17 @@ export const Step2Applicant: React.FC<Step2Props> = ({
   errors,
   onNext,
   onPrev,
+  settings,
 }) => {
+  const allowedRelations = APPLICANT_RELATIONS.filter((rel) => {
+    if (
+      settings?.halaman2?.allowPowerOfAttorney === false &&
+      rel === 'Penerima kuasa dari pemilik atau pengurus yang berwenang'
+    ) {
+      return false;
+    }
+    return true;
+  });
   const handleRelationChange = (val: ApplicantRelation) => {
     setFormData((prev) => {
       const isOwner = val === 'Pemilik usaha perseorangan' || val === 'Direktur/pengurus badan usaha yang berwenang';
@@ -117,7 +129,7 @@ export const Step2Applicant: React.FC<Step2Props> = ({
               2. Hubungan Pemohon dengan Usaha <span className="text-rose-500">*</span>
             </label>
             <div className="space-y-2.5 mt-2">
-              {APPLICANT_RELATIONS.map((rel) => (
+              {allowedRelations.map((rel) => (
                 <label
                   key={rel}
                   className={`flex items-center space-x-3 p-3.5 rounded-xl border cursor-pointer transition-all ${

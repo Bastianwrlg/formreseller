@@ -120,6 +120,7 @@ export interface FormData {
   docPurchaseProof?: UploadedFile;
   docPowerOfAttorney?: UploadedFile;
   docBoardAuthority?: UploadedFile;
+  uploadLaterConsent?: boolean; // Pilihan menyusulkan dokumen via WhatsApp / verifikasi lanjutan
 
   // Halaman 8: Ketentuan Reseller dan Privasi
   agreeTerms: boolean;

@@ -1,0 +1,85 @@
+{
+  "entities": {
+    "Application": {
+      "title": "Application",
+      "description": "Data permohonan pendaftaran reseller resmi PT. PODA E-LIQUID COMPANY",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "ID unik permohonan"
+        },
+        "registrationNumber": {
+          "type": "string",
+          "description": "Nomor registrasi resmi"
+        },
+        "applicantName": {
+          "type": "string",
+          "description": "Nama pemohon"
+        },
+        "applicantWhatsapp": {
+          "type": "string",
+          "description": "WhatsApp pemohon"
+        },
+        "applicantEmail": {
+          "type": "string",
+          "description": "Email pemohon"
+        },
+        "businessTradeName": {
+          "type": "string",
+          "description": "Nama dagang toko"
+        },
+        "businessLegalName": {
+          "type": "string",
+          "description": "Nama badan usaha"
+        },
+        "nibNumber": {
+          "type": "string",
+          "description": "Nomor Induk Berusaha OSS"
+        },
+        "salesChannel": {
+          "type": "string",
+          "description": "Saluran penjualan"
+        },
+        "status": {
+          "type": "string",
+          "description": "Status evaluasi permohonan"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Waktu pembuatan ISO"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Waktu pembaruan ISO"
+        }
+      },
+      "required": ["id", "status"]
+    },
+    "FormSettings": {
+      "title": "FormSettings",
+      "description": "Pengaturan formulir per halaman oleh admin",
+      "type": "object",
+      "properties": {
+        "lastUpdated": {
+          "type": "string",
+          "description": "Waktu pembaruan ISO"
+        },
+        "updatedBy": {
+          "type": "string",
+          "description": "Pihak yang memperbarui"
+        }
+      }
+    }
+  },
+  "firestore": {
+    "/applications/{appId}": {
+      "schema": "Application",
+      "description": "Koleksi permohonan pendaftaran reseller"
+    },
+    "/settings/{settingId}": {
+      "schema": "FormSettings",
+      "description": "Koleksi pengaturan per halaman formulir"
+    }
+  }
+}

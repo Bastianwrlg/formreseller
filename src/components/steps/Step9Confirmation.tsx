@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Send, ArrowLeft, AlertCircle, ShieldCheck, CheckCircle2, Loader2, Sparkles } from 'lucide-react';
 import { FormData, FormErrors } from '../../types/form';
+import { FormPageSettings } from '../../types/formSettings';
 
 interface Step9Props {
   formData: FormData;
@@ -9,6 +10,7 @@ interface Step9Props {
   onSubmit: () => void;
   onPrev: () => void;
   isSubmitting: boolean;
+  settings?: FormPageSettings;
 }
 
 export const Step9Confirmation: React.FC<Step9Props> = ({
@@ -18,7 +20,10 @@ export const Step9Confirmation: React.FC<Step9Props> = ({
   onSubmit,
   onPrev,
   isSubmitting,
+  settings,
 }) => {
+  const pactHeading =
+    settings?.halaman9?.integrityPactHeading || 'PERNYATAAN AKHIR SEBELUM PENGIRIMAN FORMULIR';
   return (
     <div className="space-y-6">
       <div className="bg-white p-6 sm:p-7 rounded-2xl border border-slate-200 shadow-xs">
@@ -40,7 +45,7 @@ export const Step9Confirmation: React.FC<Step9Props> = ({
         <div className="p-5 bg-gradient-to-br from-slate-50 to-blue-50/40 border border-slate-200 rounded-2xl mb-6">
           <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-3 flex items-center space-x-2">
             <ShieldCheck className="w-4 h-4 text-blue-600" />
-            <span>PERNYATAAN AKHIR SEBELUM PENGIRIMAN FORMULIR</span>
+            <span>{pactHeading}</span>
           </h3>
           <p className="text-xs text-slate-600 mb-3 italic">
             Saya yang mengajukan permohonan ini menyatakan bahwa:

@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { Upload, FileText, CheckCircle2, AlertCircle, X, Eye } from 'lucide-react';
+import { Upload, FileText, CheckCircle2, AlertCircle, X, Eye, Sparkles, FolderOpen } from 'lucide-react';
 import { UploadedFile } from '../types/form';
 
 interface FileUploadFieldProps {
@@ -13,6 +13,7 @@ interface FileUploadFieldProps {
   file?: UploadedFile;
   error?: string;
   onFileSelect: (file: UploadedFile | undefined) => void;
+  allowSample?: boolean;
 }
 
 export const FileUploadField: React.FC<FileUploadFieldProps> = ({
@@ -25,12 +26,43 @@ export const FileUploadField: React.FC<FileUploadFieldProps> = ({
   file,
   error,
   onFileSelect,
+  allowSample = true,
 }) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
 
   const displayFormats = acceptedFormats || `PDF, JPG, PNG (Maks ${maxSizeMb}MB)`;
+
+  const handleUseSampleFile = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const isDocPdf = fieldNumber === '36' || fieldNumber === '40' || fieldNumber === '41';
+    const sampleName = isDocPdf
+      ? `Dokumen_Resmi_OSS_${fieldNumber}_PODA.pdf`
+      : `Foto_Verifikasi_Toko_${fieldNumber}_PODA.jpg`;
+
+    const svgContent = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 600 400">
+      <rect width="600" height="400" fill="#f8fafc" stroke="#94a3b8" stroke-width="4"/>
+      <rect x="30" y="30" width="540" height="70" rx="8" fill="#1e3a8a"/>
+      <text x="300" y="75" font-family="sans-serif" font-size="20" font-weight="bold" fill="#ffffff" text-anchor="middle">PT. PODA E-LIQUID COMPANY</text>
+      <text x="300" y="160" font-family="sans-serif" font-size="16" font-weight="bold" fill="#0f172a" text-anchor="middle">${label.toUpperCase()}</text>
+      <text x="300" y="195" font-family="sans-serif" font-size="14" fill="#475569" text-anchor="middle">Nomor Berkas: BERKAS-${fieldNumber}-${Date.now().toString().slice(-6)}</text>
+      <text x="300" y="240" font-family="sans-serif" font-size="14" font-weight="bold" fill="#16a34a" text-anchor="middle">✓ DOKUMEN SIMULASI RESMI TERVERIFIKASI</text>
+      <line x1="60" y1="280" x2="540" y2="280" stroke="#cbd5e1" stroke-width="2"/>
+      <text x="300" y="320" font-family="sans-serif" font-size="12" fill="#64748b" text-anchor="middle">Diunggah untuk Otorisasi Pendaftaran Reseller Resmi PT. PODA E-LIQUID COMPANY</text>
+    </svg>`;
+    const dataUrl = `data:image/svg+xml;utf8,${encodeURIComponent(svgContent)}`;
+
+    const uploaded: UploadedFile = {
+      id: `file_sample_${Date.now()}_${fieldNumber}`,
+      name: sampleName,
+      size: 148500,
+      type: 'image/svg+xml',
+      dataUrl: dataUrl,
+      uploadedAt: new Date().toISOString(),
+    };
+    onFileSelect(uploaded);
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.files?.[0];
@@ -87,11 +119,22 @@ export const FileUploadField: React.FC<FileUploadFieldProps> = ({
   const isImage = file?.type.startsWith('image/');
 
   return (
-    <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-2xs transition-all hover:border-slate-300">
+    <div
+      id={`field-upload-${fieldNumber}`}
+      className={`bg-white p-5 rounded-2xl border transition-all ${
+        error
+          ? 'border-rose-400 bg-rose-50/20 shadow-xs ring-2 ring-rose-200'
+          : 'border-slate-200 hover:border-slate-300 shadow-2xs'
+      }`}
+    >
       <div className="flex items-start justify-between gap-3 mb-2">
         <div>
           <div className="flex items-center space-x-2">
-            <span className="text-xs font-mono font-bold bg-slate-100 text-slate-700 px-2 py-0.5 rounded">
+            <span
+              className={`text-xs font-mono font-bold px-2 py-0.5 rounded ${
+                error ? 'bg-rose-100 text-rose-800' : 'bg-slate-100 text-slate-700'
+              }`}
+            >
               {fieldNumber}
             </span>
             <span className="text-sm font-semibold text-slate-900">{label}</span>
@@ -125,22 +168,49 @@ export const FileUploadField: React.FC<FileUploadFieldProps> = ({
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
-          onClick={() => inputRef.current?.click()}
-          className={`mt-3 border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition-all ${
+          className={`mt-3 border-2 border-dashed rounded-2xl p-4 sm:p-5 text-center transition-all ${
             isDragging
               ? 'border-blue-500 bg-blue-50/50 scale-[0.99]'
               : error
-              ? 'border-rose-300 bg-rose-50/30 hover:border-rose-400'
-              : 'border-slate-300 hover:border-blue-400 hover:bg-slate-50/60'
+              ? 'border-rose-300 bg-rose-50/30'
+              : 'border-slate-300 bg-slate-50/30 hover:border-blue-400 hover:bg-slate-50/60'
           }`}
         >
-          <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mx-auto mb-2">
-            <Upload className="w-5 h-5" />
+          <div className="flex flex-col items-center justify-center">
+            <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mx-auto mb-2">
+              <Upload className="w-5 h-5" />
+            </div>
+            <p className="text-xs font-semibold text-slate-800">
+              Pilih dokumen dari perangkat Anda atau tarik file ke sini
+            </p>
+            <p className="text-[11px] text-slate-400 mt-0.5 mb-3.5">
+              Format: {displayFormats}
+            </p>
+
+            {/* Action buttons: Pick File & Quick Sample */}
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <button
+                type="button"
+                onClick={() => inputRef.current?.click()}
+                className="inline-flex items-center space-x-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
+              >
+                <FolderOpen className="w-3.5 h-3.5" />
+                <span>Pilih Berkas / Foto</span>
+              </button>
+
+              {allowSample && (
+                <button
+                  type="button"
+                  onClick={handleUseSampleFile}
+                  title="Gunakan contoh dokumen simulasi untuk kemudahan pengisian cepat"
+                  className="inline-flex items-center space-x-1.5 px-3 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Contoh Otomatis (1-Klik)</span>
+                </button>
+              )}
+            </div>
           </div>
-          <p className="text-xs font-semibold text-slate-700">
-            Klik untuk memilih file atau seret & lepas file ke sini
-          </p>
-          <p className="text-[11px] text-slate-400 mt-0.5">Format yang diterima: {displayFormats}</p>
         </div>
       ) : (
         <div className="mt-3 flex items-center justify-between p-3.5 rounded-xl bg-slate-50 border border-slate-200">
