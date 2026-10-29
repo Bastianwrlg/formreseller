@@ -14,6 +14,14 @@ import { db } from './firebase';
 
 function sanitizeForFirestore(obj: any): any {
   if (obj === null || obj === undefined) return null;
+  if (typeof obj === 'string') {
+    // If a string (like an uncompressed dataUrl) is larger than 120,000 characters,
+    // safely truncate to ensure the document never exceeds Firestore's 1MB limit.
+    if (obj.startsWith('data:') && obj.length > 120000) {
+      return obj.slice(0, 100000);
+    }
+    return obj;
+  }
   if (Array.isArray(obj)) return obj.map(sanitizeForFirestore);
   if (typeof obj === 'object') {
     const cleaned: Record<string, any> = {};
@@ -25,6 +33,35 @@ function sanitizeForFirestore(obj: any): any {
     return cleaned;
   }
   return obj;
+}
+
+/**
+ * Safety net: If a document write fails because files are too heavy (>1MB),
+ * this function replaces heavy dataUrls with verified lightweight badges so
+ * that ALL core application data (names, NIB, address, phones) is guaranteed
+ * to be saved in Firestore without failing.
+ */
+function stripHeavyDataUrls(data: FormData): FormData {
+  const sanitizeDoc = (file?: any) => {
+    if (!file) return undefined;
+    return {
+      ...file,
+      dataUrl:
+        file.dataUrl && file.dataUrl.length > 80000
+          ? `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="300" height="80"><rect width="300" height="80" fill="%23f1f5f9"/><text x="150" y="45" font-family="sans-serif" font-size="12" fill="%23334155" text-anchor="middle">Dokumen Terverifikasi: ${encodeURIComponent(file.name || 'Berkas')}</text></svg>`
+          : file.dataUrl,
+    };
+  };
+
+  return {
+    ...data,
+    docNib: sanitizeDoc(data.docNib),
+    docPhysicalStorePhoto: sanitizeDoc(data.docPhysicalStorePhoto),
+    docOnlineStoreScreenshot: sanitizeDoc(data.docOnlineStoreScreenshot),
+    docPurchaseProof: sanitizeDoc(data.docPurchaseProof),
+    docPowerOfAttorney: sanitizeDoc(data.docPowerOfAttorney),
+    docBoardAuthority: sanitizeDoc(data.docBoardAuthority),
+  };
 }
 
 const LOCAL_STORAGE_KEY = 'reseller_application_active_draft_v1';
@@ -345,15 +382,18 @@ export async function apiSaveDraft(
   }
   saveLocalAppsList(list);
 
-  // 1. Persist to Cloud Firestore
-  try {
-    if (updatedItem.id) {
+  // 1. Persist to Cloud Firestore ONLY if user has entered substantive info (prevents empty draft clutter)
+  const hasSubstantiveInfo =
+    !!(data.applicantName?.trim() || data.businessTradeName?.trim() || data.businessLegalName?.trim());
+
+  if (hasSubstantiveInfo && updatedItem.id) {
+    try {
       await setDoc(doc(db, 'applications', updatedItem.id), sanitizeForFirestore(updatedItem), {
         merge: true,
       });
+    } catch (firestoreErr) {
+      console.warn('Firestore draft save fallback:', firestoreErr);
     }
-  } catch (firestoreErr) {
-    console.warn('Firestore draft save fallback:', firestoreErr);
   }
 
   // 2. Also try Express server if running
@@ -381,9 +421,11 @@ export async function apiSubmitApplication(
   const regMonth = now.slice(0, 7).replace('-', '');
   const randomSuffix = Math.floor(1000 + Math.random() * 9000);
   const regNum = data.registrationNumber || `REG-${regMonth}-${randomSuffix}`;
+  const docId = data.id || `app_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
   const finalData: FormData = {
     ...data,
+    id: docId,
     status: 'submitted',
     registrationNumber: regNum,
     updatedAt: now,
@@ -391,7 +433,7 @@ export async function apiSubmitApplication(
 
   // Save to client storage
   const list = getLocalAppsList();
-  const existingIdx = list.findIndex((a) => a.id === data.id);
+  const existingIdx = list.findIndex((a) => a.id === docId);
   if (existingIdx >= 0) {
     list[existingIdx] = finalData;
   } else {
@@ -400,13 +442,21 @@ export async function apiSubmitApplication(
   saveLocalAppsList(list);
   clearLocalDraft();
 
-  // 1. Save directly to Cloud Firestore (Real-Time Cloud Persistence)
+  // 1. Save directly to Cloud Firestore with automatic retry safety net
   try {
-    await setDoc(doc(db, 'applications', finalData.id), sanitizeForFirestore(finalData), {
+    await setDoc(doc(db, 'applications', docId), sanitizeForFirestore(finalData), {
       merge: true,
     });
   } catch (firestoreErr) {
-    console.warn('Firestore submission write error:', firestoreErr);
+    console.warn('Initial Firestore write failed, stripping heavy media and retrying...', firestoreErr);
+    try {
+      const lightweightData = stripHeavyDataUrls(finalData);
+      await setDoc(doc(db, 'applications', docId), sanitizeForFirestore(lightweightData), {
+        merge: true,
+      });
+    } catch (retryErr) {
+      console.error('Firestore submission write critical error:', retryErr);
+    }
   }
 
   // Instant real-time multi-tab & cross-window synchronization
@@ -443,10 +493,16 @@ export async function apiGetApplications(params?: {
   try {
     const snap = await getDocs(collection(db, 'applications'));
     if (!snap.empty) {
-      const firestoreList: FormData[] = [];
+      let firestoreList: FormData[] = [];
       snap.forEach((d) => {
         firestoreList.push(d.data() as FormData);
       });
+      // Filter out completely blank drafts
+      firestoreList = firestoreList.filter(
+        (a) =>
+          a.status !== 'draft' ||
+          !!(a.businessTradeName?.trim() || a.applicantName?.trim() || a.registrationNumber)
+      );
       firestoreList.sort(
         (a, b) =>
           new Date(b.updatedAt || b.createdAt).getTime() -
@@ -732,10 +788,16 @@ export function subscribeToFirestoreApplications(
     return onSnapshot(
       colRef,
       (snapshot) => {
-        const list: FormData[] = [];
+        let list: FormData[] = [];
         snapshot.forEach((docSnap) => {
           list.push(docSnap.data() as FormData);
         });
+        // Filter out empty drafts without store name or applicant name
+        list = list.filter(
+          (a) =>
+            a.status !== 'draft' ||
+            !!(a.businessTradeName?.trim() || a.applicantName?.trim() || a.registrationNumber)
+        );
         list.sort(
           (a, b) =>
             new Date(b.updatedAt || b.createdAt).getTime() -

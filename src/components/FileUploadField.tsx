@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { Upload, FileText, CheckCircle2, AlertCircle, X, Eye, Sparkles, FolderOpen } from 'lucide-react';
 import { UploadedFile } from '../types/form';
+import { compressImage } from '../utils/imageCompressor';
 
 interface FileUploadFieldProps {
   label: string;
@@ -70,26 +71,40 @@ export const FileUploadField: React.FC<FileUploadFieldProps> = ({
     processFile(selected);
   };
 
-  const processFile = (selected: File) => {
+  const processFile = async (selected: File) => {
     // Validate size (maxSizeMb)
     if (selected.size > maxSizeMb * 1024 * 1024) {
       alert(`Ukuran file melebihi batas ${maxSizeMb}MB.`);
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
+    try {
+      const dataUrl = await compressImage(selected, 1000, 0.7);
       const uploaded: UploadedFile = {
         id: `file_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
         name: selected.name,
         size: selected.size,
         type: selected.type,
-        dataUrl: reader.result as string,
+        dataUrl,
         uploadedAt: new Date().toISOString(),
       };
       onFileSelect(uploaded);
-    };
-    reader.readAsDataURL(selected);
+    } catch (err) {
+      console.warn('Compression fallback to normal reader:', err);
+      const reader = new FileReader();
+      reader.onload = () => {
+        const uploaded: UploadedFile = {
+          id: `file_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          name: selected.name,
+          size: selected.size,
+          type: selected.type,
+          dataUrl: reader.result as string,
+          uploadedAt: new Date().toISOString(),
+        };
+        onFileSelect(uploaded);
+      };
+      reader.readAsDataURL(selected);
+    }
   };
 
   const handleDragOver = (e: React.DragEvent) => {

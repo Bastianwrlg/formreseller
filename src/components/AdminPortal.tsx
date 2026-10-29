@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Search,
   CheckCircle2,
@@ -40,7 +40,7 @@ interface AdminPortalProps {
 }
 
 export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToForm }) => {
-  const [applications, setApplications] = useState<FormData[]>([]);
+  const [allApplications, setAllApplications] = useState<FormData[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -56,11 +56,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToForm }) => {
 
   const fetchApps = async (showLoading = false) => {
     if (showLoading) setLoading(true);
-    const data = await apiGetApplications({
-      status: statusFilter !== 'all' ? statusFilter : undefined,
-      search: searchQuery || undefined,
-    });
-    setApplications(data);
+    const data = await apiGetApplications();
+    setAllApplications(data);
     setLoading(false);
   };
 
@@ -69,21 +66,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToForm }) => {
 
     // 1. Subscribe to Cloud Firestore real-time snapshot (Multi-Device & Cross-User)
     const unsubscribeFirestore = subscribeToFirestoreApplications((freshList) => {
-      let filtered = freshList;
-      if (statusFilter !== 'all') {
-        filtered = filtered.filter((a) => a.status === statusFilter);
-      }
-      if (searchQuery) {
-        const q = searchQuery.toLowerCase();
-        filtered = filtered.filter(
-          (a) =>
-            (a.registrationNumber && a.registrationNumber.toLowerCase().includes(q)) ||
-            (a.businessTradeName && a.businessTradeName.toLowerCase().includes(q)) ||
-            (a.applicantName && a.applicantName.toLowerCase().includes(q)) ||
-            (a.nibNumber && a.nibNumber.toLowerCase().includes(q))
-        );
-      }
-      setApplications(filtered);
+      setAllApplications(freshList);
       setLoading(false);
     });
 
@@ -100,21 +83,41 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToForm }) => {
       }
     });
 
-    // 3. Heartbeat polling every 10 seconds for multi-device sync redundancy
+    // 3. Heartbeat polling every 8 seconds for multi-device sync redundancy
     const intervalId = setInterval(() => {
       fetchApps(false);
-    }, 10000);
+    }, 8000);
 
     return () => {
       unsubscribeFirestore();
       unsubscribeSync();
       clearInterval(intervalId);
     };
-  }, [statusFilter, searchQuery]);
+  }, []);
+
+  // Filtered applications based on active filter and search query
+  const applications = useMemo(() => {
+    let list = allApplications;
+    if (statusFilter !== 'all') {
+      list = list.filter((a) => a.status === statusFilter);
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      list = list.filter(
+        (a) =>
+          (a.registrationNumber && a.registrationNumber.toLowerCase().includes(q)) ||
+          (a.businessTradeName && a.businessTradeName.toLowerCase().includes(q)) ||
+          (a.businessLegalName && a.businessLegalName.toLowerCase().includes(q)) ||
+          (a.applicantName && a.applicantName.toLowerCase().includes(q)) ||
+          (a.nibNumber && a.nibNumber.toLowerCase().includes(q)) ||
+          (a.city && a.city.toLowerCase().includes(q))
+      );
+    }
+    return list;
+  }, [allApplications, statusFilter, searchQuery]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    fetchApps();
   };
 
   const openAppDetail = (app: FormData) => {
@@ -134,7 +137,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToForm }) => {
       });
       if (res.success && res.application) {
         setSelectedApp(res.application);
-        setApplications((prev) =>
+        setAllApplications((prev) =>
           prev.map((a) => (a.id === res.application!.id ? res.application! : a))
         );
       }
@@ -248,10 +251,10 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToForm }) => {
     document.body.removeChild(link);
   };
 
-  const totalCount = applications.length;
-  const pendingCount = applications.filter((a) => a.status === 'submitted').length;
-  const approvedCount = applications.filter((a) => a.status === 'approved' || a.status === 'continued').length;
-  const onHoldCount = applications.filter((a) => a.status === 'on_hold').length;
+  const totalCount = allApplications.length;
+  const pendingCount = allApplications.filter((a) => a.status === 'submitted').length;
+  const approvedCount = allApplications.filter((a) => a.status === 'approved' || a.status === 'continued').length;
+  const onHoldCount = allApplications.filter((a) => a.status === 'on_hold').length;
 
   return (
     <div className="space-y-4 sm:space-y-6">
