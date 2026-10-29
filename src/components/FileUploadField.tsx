@@ -2,6 +2,7 @@ import React, { useRef, useState } from 'react';
 import { Upload, FileText, CheckCircle2, AlertCircle, X, Eye, Sparkles, FolderOpen } from 'lucide-react';
 import { UploadedFile } from '../types/form';
 import { compressImage } from '../utils/imageCompressor';
+import { createStandardPdfDataUrl } from '../utils/pdfGenerator';
 
 interface FileUploadFieldProps {
   label: string;
@@ -37,28 +38,43 @@ export const FileUploadField: React.FC<FileUploadFieldProps> = ({
 
   const handleUseSampleFile = (e: React.MouseEvent) => {
     e.stopPropagation();
-    const isDocPdf = fieldNumber === '36' || fieldNumber === '40' || fieldNumber === '41';
+    const isDocPdf = fieldNumber === '36' || fieldNumber === '39' || fieldNumber === '40' || fieldNumber === '41';
     const sampleName = isDocPdf
       ? `Dokumen_Resmi_OSS_${fieldNumber}_PODA.pdf`
       : `Foto_Verifikasi_Toko_${fieldNumber}_PODA.jpg`;
 
-    const svgContent = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 600 400">
+    let dataUrl = '';
+    let fileType = '';
+    let fileSize = 145000;
+
+    if (isDocPdf) {
+      dataUrl = createStandardPdfDataUrl(sampleName, label, {
+        regNumber: `REG-PODA-${fieldNumber}-${Date.now().toString().slice(-4)}`,
+        storeName: 'PODA Store Mitra Resmi',
+        applicant: 'Pendaftar Kemitraan',
+      });
+      fileType = 'application/pdf';
+      fileSize = Math.round(dataUrl.length * 0.75);
+    } else {
+      const svgContent = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 600 400">
       <rect width="600" height="400" fill="#f8fafc" stroke="#94a3b8" stroke-width="4"/>
       <rect x="30" y="30" width="540" height="70" rx="8" fill="#1e3a8a"/>
       <text x="300" y="75" font-family="sans-serif" font-size="20" font-weight="bold" fill="#ffffff" text-anchor="middle">PT. PODA E-LIQUID COMPANY</text>
       <text x="300" y="160" font-family="sans-serif" font-size="16" font-weight="bold" fill="#0f172a" text-anchor="middle">${label.toUpperCase()}</text>
       <text x="300" y="195" font-family="sans-serif" font-size="14" fill="#475569" text-anchor="middle">Nomor Berkas: BERKAS-${fieldNumber}-${Date.now().toString().slice(-6)}</text>
-      <text x="300" y="240" font-family="sans-serif" font-size="14" font-weight="bold" fill="#16a34a" text-anchor="middle">✓ DOKUMEN SIMULASI RESMI TERVERIFIKASI</text>
+      <text x="300" y="240" font-family="sans-serif" font-size="14" font-weight="bold" fill="#16a34a" text-anchor="middle">✓ FOTO VERIFIKASI RESMI TERVERIFIKASI</text>
       <line x1="60" y1="280" x2="540" y2="280" stroke="#cbd5e1" stroke-width="2"/>
       <text x="300" y="320" font-family="sans-serif" font-size="12" fill="#64748b" text-anchor="middle">Diunggah untuk Otorisasi Pendaftaran Reseller Resmi PT. PODA E-LIQUID COMPANY</text>
     </svg>`;
-    const dataUrl = `data:image/svg+xml;utf8,${encodeURIComponent(svgContent)}`;
+      dataUrl = `data:image/svg+xml;utf8,${encodeURIComponent(svgContent)}`;
+      fileType = 'image/svg+xml';
+    }
 
     const uploaded: UploadedFile = {
       id: `file_sample_${Date.now()}_${fieldNumber}`,
       name: sampleName,
-      size: 148500,
-      type: 'image/svg+xml',
+      size: fileSize,
+      type: fileType,
       dataUrl: dataUrl,
       uploadedAt: new Date().toISOString(),
     };

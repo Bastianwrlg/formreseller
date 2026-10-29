@@ -22,13 +22,16 @@ import {
   LogOut,
   SlidersHorizontal,
   Bell,
+  X,
+  Loader2,
 } from 'lucide-react';
-import { FormData, ApplicationStatus } from '../types/form';
+import { FormData, ApplicationStatus, UploadedFile } from '../types/form';
 import { ADMIN_DECISION_RULES } from '../data/indonesia';
 import {
   apiGetApplications,
   apiUpdateDecision,
   subscribeToFirestoreApplications,
+  apiGetApplicationDocument,
 } from '../services/api';
 import { SuratPenunjukanModal } from './SuratPenunjukanModal';
 import { exportApplicationsToExcel } from '../utils/excelExport';
@@ -49,7 +52,14 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToForm }) => {
   const [reviewerName, setReviewerName] = useState('Divisi Kemitraan PT. PODA E-LIQUID COMPANY');
   const [isUpdating, setIsUpdating] = useState(false);
   const [showLetterModal, setShowLetterModal] = useState(false);
-  const [previewDocumentUrl, setPreviewDocumentUrl] = useState<string | null>(null);
+  const [previewDoc, setPreviewDoc] = useState<{
+    title: string;
+    filename: string;
+    type: string;
+    size?: number;
+    dataUrl: string;
+  } | null>(null);
+  const [loadingDocKey, setLoadingDocKey] = useState<string | null>(null);
   const [showExportDropdown, setShowExportDropdown] = useState(false);
   const [adminTab, setAdminTab] = useState<'evaluations' | 'settings'>('evaluations');
   const [liveAlert, setLiveAlert] = useState<string | null>(null);
@@ -123,6 +133,93 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToForm }) => {
   const openAppDetail = (app: FormData) => {
     setSelectedApp(app);
     setAdminNotes(app.adminNotes || '');
+  };
+
+  const handleOpenDocument = async (docKey: string, docLabel: string, fallbackFile?: UploadedFile) => {
+    if (!selectedApp) return;
+
+    // If fallbackFile already has an untruncated valid dataUrl, open immediately
+    if (fallbackFile?.dataUrl && fallbackFile.dataUrl.length > 100) {
+      setPreviewDoc({
+        title: docLabel,
+        filename: fallbackFile.name || `${docLabel}.pdf`,
+        type: fallbackFile.type || 'application/pdf',
+        size: fallbackFile.size,
+        dataUrl: fallbackFile.dataUrl,
+      });
+      return;
+    }
+
+    // Otherwise fetch from Firestore subcollection or cache
+    setLoadingDocKey(docKey);
+    try {
+      const fetched = await apiGetApplicationDocument(selectedApp.id, docKey);
+      if (fetched && fetched.dataUrl) {
+        setPreviewDoc({
+          title: docLabel,
+          filename: fetched.name || fallbackFile?.name || `${docLabel}.pdf`,
+          type: fetched.type || fallbackFile?.type || 'application/pdf',
+          size: fetched.size || fallbackFile?.size,
+          dataUrl: fetched.dataUrl,
+        });
+      } else {
+        alert('Dokumen tidak dapat dimuat atau belum diunggah oleh pemohon.');
+      }
+    } catch (err) {
+      console.error('Error loading document:', err);
+      alert('Terjadi kesalahan saat memuat berkas dokumen.');
+    } finally {
+      setLoadingDocKey(null);
+    }
+  };
+
+  const handleOpenInNewTab = (dataUrl: string, filename: string, type: string) => {
+    try {
+      const arr = dataUrl.split(',');
+      const mimeMatch = arr[0].match(/:(.*?);/);
+      const mime = mimeMatch ? mimeMatch[1] : (type || 'application/pdf');
+      const bstr = atob(arr[1]);
+      let n = bstr.length;
+      const u8arr = new Uint8Array(n);
+      while (n--) {
+        u8arr[n] = bstr.charCodeAt(n);
+      }
+      const blob = new Blob([u8arr], { type: mime });
+      const blobUrl = URL.createObjectURL(blob);
+      window.open(blobUrl, '_blank');
+    } catch (err) {
+      window.open(dataUrl, '_blank');
+    }
+  };
+
+  const handleDownloadFile = (dataUrl: string, filename: string, type: string) => {
+    try {
+      const arr = dataUrl.split(',');
+      const mimeMatch = arr[0].match(/:(.*?);/);
+      const mime = mimeMatch ? mimeMatch[1] : (type || 'application/pdf');
+      const bstr = atob(arr[1]);
+      let n = bstr.length;
+      const u8arr = new Uint8Array(n);
+      while (n--) {
+        u8arr[n] = bstr.charCodeAt(n);
+      }
+      const blob = new Blob([u8arr], { type: mime });
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+    } catch (err) {
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
   };
 
   const handleApplyDecision = async (rule: (typeof ADMIN_DECISION_RULES)[0]) => {
@@ -779,39 +876,115 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToForm }) => {
               </div>
 
               {/* Section 3: Dokumen Pendukung */}
-              <div>
-                <h3 className="font-bold text-slate-900 text-xs uppercase tracking-wider text-slate-500 mb-2">
-                  Dokumen Pendukung yang Diunggah
-                </h3>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                  <h3 className="font-bold text-slate-900 text-xs uppercase tracking-wider text-slate-500 flex items-center space-x-1.5">
+                    <FileText className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Dokumen Pendukung yang Diunggah Pemohon</span>
+                  </h3>
+                  <span className="text-[11px] text-slate-500">
+                    Klik <strong className="text-blue-700">Buka File</strong> untuk membaca PDF/Foto langsung di layar
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
                   {[
-                    { label: 'NIB', file: selectedApp.docNib },
-                    { label: 'Foto Toko', file: selectedApp.docPhysicalStorePhoto },
-                    { label: 'Screenshot Online', file: selectedApp.docOnlineStoreScreenshot },
-                    { label: 'Invoice/Bukti Beli', file: selectedApp.docPurchaseProof },
-                    { label: 'Surat Kuasa', file: selectedApp.docPowerOfAttorney },
-                    { label: 'Dokumen Pengurus', file: selectedApp.docBoardAuthority },
-                  ].map((doc) => (
-                    <div key={doc.label} className="p-2.5 bg-white rounded-xl border border-slate-200 text-xs">
-                      <span className="text-[11px] text-slate-400 font-medium block truncate">{doc.label}</span>
-                      {doc.file ? (
-                        <div className="mt-1">
-                          <p className="font-semibold text-slate-800 truncate text-[11px]">{doc.file.name}</p>
-                          {doc.file.dataUrl && (
-                            <button
-                              type="button"
-                              onClick={() => setPreviewDocumentUrl(doc.file!.dataUrl!)}
-                              className="mt-1 w-full py-1 bg-blue-50 text-blue-700 rounded-md text-[10px] font-bold"
-                            >
-                              Pratinjau
-                            </button>
-                          )}
+                    { key: 'docNib', label: 'NIB OSS Perizinan', file: selectedApp.docNib, badge: 'Wajib' },
+                    { key: 'docPhysicalStorePhoto', label: 'Foto Tampak Depan Toko', file: selectedApp.docPhysicalStorePhoto, badge: 'Toko Fisik' },
+                    { key: 'docOnlineStoreScreenshot', label: 'Screenshot Toko Online', file: selectedApp.docOnlineStoreScreenshot, badge: 'Toko Online' },
+                    { key: 'docPurchaseProof', label: 'Faktur / Bukti Pembelian', file: selectedApp.docPurchaseProof, badge: 'Faktur' },
+                    { key: 'docPowerOfAttorney', label: 'Surat Kuasa Direksi', file: selectedApp.docPowerOfAttorney, badge: 'Kondisional' },
+                    { key: 'docBoardAuthority', label: 'Dokumen Pengurus / Akta', file: selectedApp.docBoardAuthority, badge: 'Badan Usaha' },
+                  ].map((doc) => {
+                    const isAvailable = !!doc.file;
+                    const isPdf =
+                      doc.file?.type === 'application/pdf' ||
+                      (doc.file?.name && doc.file.name.toLowerCase().endsWith('.pdf')) ||
+                      doc.key === 'docNib' ||
+                      doc.key === 'docPurchaseProof' ||
+                      doc.key === 'docPowerOfAttorney' ||
+                      doc.key === 'docBoardAuthority';
+                    const isLoadingThis = loadingDocKey === doc.key;
+
+                    return (
+                      <div
+                        key={doc.key}
+                        className={`p-3 rounded-xl border transition-all ${
+                          isAvailable
+                            ? 'bg-white border-blue-200/80 hover:border-blue-400 hover:shadow-xs shadow-2xs'
+                            : 'bg-slate-100/60 border-slate-200 opacity-60'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-1 mb-1.5">
+                          <span className="text-[11px] font-bold text-slate-700 truncate">{doc.label}</span>
+                          <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 shrink-0">
+                            {doc.badge}
+                          </span>
                         </div>
-                      ) : (
-                        <span className="text-[10px] text-slate-400 italic block mt-1">Tidak ada</span>
-                      )}
-                    </div>
-                  ))}
+
+                        {isAvailable ? (
+                          <div className="space-y-2">
+                            <div className="flex items-center space-x-2">
+                              <div
+                                className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                                  isPdf ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'
+                                }`}
+                              >
+                                {isPdf ? <FileText className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="font-semibold text-slate-800 truncate text-xs" title={doc.file!.name}>
+                                  {doc.file!.name}
+                                </p>
+                                <p className="text-[10px] text-slate-400">
+                                  {doc.file!.size ? (doc.file!.size / 1024).toFixed(0) + ' KB' : 'Terverifikasi'}
+                                  {isPdf ? ' • PDF' : ' • Foto/Gambar'}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-1.5 pt-1">
+                              <button
+                                type="button"
+                                disabled={isLoadingThis}
+                                onClick={() => handleOpenDocument(doc.key, doc.label, doc.file)}
+                                className="w-full py-1.5 px-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-lg text-xs font-semibold flex items-center justify-center space-x-1 shadow-xs transition-colors cursor-pointer"
+                              >
+                                {isLoadingThis ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                  <>
+                                    <Eye className="w-3.5 h-3.5" />
+                                    <span>Buka File</span>
+                                  </>
+                                )}
+                              </button>
+                              <button
+                                type="button"
+                                disabled={isLoadingThis}
+                                onClick={async () => {
+                                  const f = doc.file?.dataUrl ? doc.file : await apiGetApplicationDocument(selectedApp.id, doc.key);
+                                  if (f?.dataUrl) {
+                                    handleDownloadFile(f.dataUrl, f.name || `${doc.label}.pdf`, f.type);
+                                  } else {
+                                    alert('Berkas tidak tersedia untuk diunduh.');
+                                  }
+                                }}
+                                className="w-full py-1.5 px-2 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 rounded-lg text-xs font-semibold flex items-center justify-center space-x-1 transition-colors cursor-pointer"
+                              >
+                                <Download className="w-3.5 h-3.5" />
+                                <span>Unduh</span>
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="py-2 text-center">
+                            <span className="text-[11px] text-slate-400 italic">Tidak dilampirkan pemohon</span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -887,36 +1060,121 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToForm }) => {
       </>
       )}
 
-      {/* Document Quick Preview Modal */}
-      {previewDocumentUrl && (
-        <div className="fixed inset-0 z-60 bg-black/80 backdrop-blur-xs flex items-center justify-center p-3">
-          <div className="bg-white rounded-2xl max-w-xl w-full max-h-[85vh] p-3 sm:p-4 flex flex-col shadow-2xl">
-            <div className="flex justify-between items-center pb-2 border-b border-slate-200 mb-2">
-              <span className="text-xs font-bold text-slate-800">Pratinjau Dokumen</span>
-              <button
-                type="button"
-                onClick={() => setPreviewDocumentUrl(null)}
-                className="text-slate-400 hover:text-slate-700 p-1 rounded-lg"
-              >
-                ✕
-              </button>
+      {/* Comprehensive PDF & Image Document Viewer Modal */}
+      {previewDoc && (
+        <div className="fixed inset-0 z-60 bg-black/80 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl max-w-4xl w-full max-h-[94vh] flex flex-col shadow-2xl overflow-hidden border border-slate-200">
+            {/* Modal Topbar */}
+            <div className="p-3 sm:p-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between gap-3">
+              <div className="min-w-0 pr-2">
+                <div className="flex items-center space-x-2">
+                  <span className="text-[10px] font-bold font-mono px-2 py-0.5 rounded bg-blue-100 text-blue-800 uppercase shrink-0">
+                    {previewDoc.type.includes('pdf') || previewDoc.filename.toLowerCase().endsWith('.pdf')
+                      ? 'DOKUMEN PDF'
+                      : 'FOTO / GAMBAR'}
+                  </span>
+                  <h3 className="text-xs sm:text-sm font-bold text-slate-900 truncate">
+                    {previewDoc.filename}
+                  </h3>
+                </div>
+                <p className="text-[11px] text-slate-500 truncate mt-0.5">
+                  {previewDoc.title} {previewDoc.size ? `• ${(previewDoc.size / 1024).toFixed(0)} KB` : ''}
+                </p>
+              </div>
+
+              <div className="flex items-center space-x-1.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleOpenInNewTab(previewDoc.dataUrl, previewDoc.filename, previewDoc.type)
+                  }
+                  className="inline-flex items-center space-x-1 px-2.5 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 active:bg-slate-100 text-slate-700 rounded-xl text-xs font-semibold transition-colors shadow-2xs cursor-pointer"
+                  title="Buka dokumen di tab baru browser"
+                >
+                  <ExternalLink className="w-3.5 h-3.5 text-blue-600" />
+                  <span className="hidden sm:inline">Buka Tab Baru</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleDownloadFile(previewDoc.dataUrl, previewDoc.filename, previewDoc.type)
+                  }
+                  className="inline-flex items-center space-x-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-xl text-xs font-semibold transition-colors shadow-xs cursor-pointer"
+                  title="Unduh berkas dokumen ke perangkat"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Unduh Berkas</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setPreviewDoc(null)}
+                  className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-200/60 cursor-pointer"
+                  title="Tutup"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
-            <div className="flex-1 overflow-auto flex items-center justify-center bg-slate-100 rounded-xl p-2">
-              {previewDocumentUrl.startsWith('data:image') ? (
-                <img src={previewDocumentUrl} alt="Preview" className="max-h-[60vh] object-contain rounded" />
+
+            {/* Modal Content Viewport */}
+            <div className="flex-1 overflow-auto bg-slate-900/5 p-2 sm:p-4 flex flex-col items-center justify-center min-h-[340px]">
+              {previewDoc.type.includes('pdf') ||
+              previewDoc.filename.toLowerCase().endsWith('.pdf') ||
+              previewDoc.dataUrl.startsWith('data:application/pdf') ? (
+                <div className="w-full h-full flex flex-col items-center">
+                  <iframe
+                    src={previewDoc.dataUrl}
+                    className="w-full h-[65vh] sm:h-[72vh] rounded-2xl border border-slate-200 bg-white shadow-inner"
+                    title={previewDoc.filename}
+                  />
+                  <div className="mt-2 text-center text-xs text-slate-500 flex flex-wrap items-center justify-center gap-2">
+                    <span>Penampil PDF Aktif. Tampilan layar penuh:</span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleOpenInNewTab(previewDoc.dataUrl, previewDoc.filename, previewDoc.type)
+                      }
+                      className="text-blue-600 font-semibold underline hover:text-blue-800 cursor-pointer"
+                    >
+                      Buka di Tab Baru
+                    </button>
+                    <span>atau</span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleDownloadFile(previewDoc.dataUrl, previewDoc.filename, previewDoc.type)
+                      }
+                      className="text-blue-600 font-semibold underline hover:text-blue-800 cursor-pointer"
+                    >
+                      Unduh PDF
+                    </button>
+                  </div>
+                </div>
               ) : (
-                <div className="text-center p-4 bg-white rounded-xl shadow-xs">
-                  <FileText className="w-10 h-10 text-blue-600 mx-auto mb-2" />
-                  <p className="text-xs font-semibold text-slate-800">Dokumen PDF Terlampir</p>
-                  <a
-                    href={previewDocumentUrl}
-                    download="dokumen_verifikasi.pdf"
-                    className="mt-2 inline-block px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-semibold"
-                  >
-                    Unduh / Buka Dokumen
-                  </a>
+                <div className="max-h-[70vh] flex items-center justify-center p-2">
+                  <img
+                    src={previewDoc.dataUrl}
+                    alt={previewDoc.filename}
+                    className="max-h-[68vh] max-w-full object-contain rounded-xl shadow-md border border-slate-200 bg-white"
+                  />
                 </div>
               )}
+            </div>
+
+            {/* Footer bar */}
+            <div className="p-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500">
+              <span className="font-mono text-[11px] truncate max-w-[200px] sm:max-w-md">
+                {previewDoc.filename}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPreviewDoc(null)}
+                className="px-4 py-1.5 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-xl font-semibold cursor-pointer"
+              >
+                Tutup Pratinjau
+              </button>
             </div>
           </div>
         </div>

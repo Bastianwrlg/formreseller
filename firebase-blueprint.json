@@ -71,11 +71,47 @@
         }
       }
     }
+    "Document": {
+      "title": "Document",
+      "description": "Berkas dokumen pendukung resmi (PDF/gambar) yang diunggah pemohon",
+      "type": "object",
+      "properties": {
+        "field": {
+          "type": "string",
+          "description": "Nama field berkas (docNib, docPhysicalStorePhoto, dll)"
+        },
+        "name": {
+          "type": "string",
+          "description": "Nama asli file dokumen"
+        },
+        "type": {
+          "type": "string",
+          "description": "MIME type berkas (application/pdf, image/jpeg, dll)"
+        },
+        "size": {
+          "type": "number",
+          "description": "Ukuran file dalam byte"
+        },
+        "dataUrl": {
+          "type": "string",
+          "description": "Data URL lengkap dokumen untuk dibuka admin"
+        },
+        "uploadedAt": {
+          "type": "string",
+          "description": "Waktu upload ISO"
+        }
+      },
+      "required": ["field", "name", "dataUrl"]
+    }
   },
   "firestore": {
     "/applications/{appId}": {
       "schema": "Application",
       "description": "Koleksi permohonan pendaftaran reseller"
+    },
+    "/applications/{appId}/documents/{docId}": {
+      "schema": "Document",
+      "description": "Sub-koleksi berkas dokumen (PDF, foto toko, sertifikat) per permohonan"
     },
     "/settings/{settingId}": {
       "schema": "FormSettings",

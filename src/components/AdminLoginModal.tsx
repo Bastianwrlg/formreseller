@@ -48,7 +48,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
           </div>
           <h2 className="text-lg font-bold tracking-tight">Otorisasi Akses Internal</h2>
           <p className="text-xs text-blue-200/80 mt-1">
-            PT. PODA E-LIQUID COMPANY • Divisi Kemitraan & Legal
+            PT. PODA E-LIQUID COMPANY
           </p>
 
           <button
